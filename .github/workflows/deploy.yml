@@ -28,6 +28,12 @@ jobs:
       - name: Build React App
         run: npm run build
 
+      # Step 4.5: Set Git user
+      - name: Set Git user
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
       # Step 5: Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         run: npm run deploy
