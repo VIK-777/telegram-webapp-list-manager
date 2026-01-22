@@ -7,7 +7,7 @@ import Gun from "gun"
 // Initialize Gun with public relay peers for real-time sync
 // In a production app, you would host your own relay peers.
 const gun = Gun({
-  peers: [`${process.env.REACT_APP_GUN_URL}`],
+  peers: [`${process.env.VITE_GUN_URL}`],
 })
 
 const App: React.FC = () => {
@@ -34,6 +34,7 @@ const App: React.FC = () => {
     tg?.expand()
 
     console.log(`Gun URL: ${process.env.REACT_APP_GUN_URL}`)
+    console.log(`Vite Gun URL: ${process.env.VITE_GUN_URL}`)
     // 2. Synchronize with Gun.js
     const listNode = gun.get(roomId).get("tasks")
 
