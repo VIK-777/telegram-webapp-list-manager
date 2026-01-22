@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react"
 import { Task, AppStatus } from "./types"
-import { TaskItem } from "./components/TaskItem"
 import { TaskInput } from "./components/TaskInput"
 import Gun from "gun"
 
@@ -16,12 +15,92 @@ interface ListMetadata {
   createdAt: number
 }
 
+const TaskItem: React.FC<{
+  task: Task & { order?: number }
+  onToggle: (id: string) => void
+  onDelete: (id: string) => void
+  onRename: (id: string, newText: string) => void
+}> = ({ task, onToggle, onDelete, onRename }) => {
+  const [isEditing, setIsEditing] = useState(false)
+  const [editedText, setEditedText] = useState(task.text)
+
+  const handleSave = () => {
+    if (editedText.trim() && editedText !== task.text) {
+      onRename(task.id, editedText)
+    }
+    setIsEditing(false)
+  }
+
+  return (
+    <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 flex items-center justify-between group">
+      <div className="flex items-center flex-1 min-w-0 gap-3">
+        <div
+          onClick={() => onToggle(task.id)}
+          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center cursor-pointer transition-colors flex-shrink-0 ${
+            task.completed
+              ? "bg-green-500 border-green-500"
+              : "border-gray-300 hover:border-[#2481cc]"
+          }`}>
+          {task.completed && (
+            <i className="fas fa-check text-white text-[10px]"></i>
+          )}
+        </div>
+
+        {isEditing ? (
+          <input
+            autoFocus
+            className="flex-1 bg-transparent border-b-2 border-[#2481cc] focus:outline-none text-gray-800 py-0.5"
+            value={editedText}
+            onChange={(e) => setEditedText(e.target.value)}
+            onBlur={handleSave}
+            onKeyDown={(e) => e.key === "Enter" && handleSave()}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <span
+            onClick={() => setIsEditing(true)}
+            className={`flex-1 truncate cursor-text select-none ${
+              task.completed ? "text-gray-400 line-through" : "text-gray-800"
+            }`}>
+            {task.text}
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+        {!isEditing && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setEditedText(task.text)
+              setIsEditing(true)
+            }}
+            className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-blue-500 transition-colors">
+            <i className="fas fa-pen text-xs"></i>
+          </button>
+        )}
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete(task.id)
+          }}
+          className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors">
+          <i className="fas fa-trash-alt text-xs"></i>
+        </button>
+      </div>
+    </div>
+  )
+}
+
 const ListEntry: React.FC<{
   list: ListMetadata
   onSelect: (id: string) => void
   onDelete: (id: string) => void
-}> = ({ list, onSelect, onDelete }) => {
+  onRename: (id: string, name: string) => void
+}> = ({ list, onSelect, onDelete, onRename }) => {
   const [stats, setStats] = useState({ total: 0, completed: 0 })
+  const [isEditing, setIsEditing] = useState(false)
+  const [editedName, setEditedName] = useState(list.name)
 
   useEffect(() => {
     const tasksMap = new Map<string, boolean>()
@@ -49,14 +128,33 @@ const ListEntry: React.FC<{
     }
   }, [list.id])
 
+  const handleSave = () => {
+    if (editedName.trim() && editedName !== list.name) {
+      onRename(list.id, editedName)
+    }
+    setIsEditing(false)
+  }
+
   return (
     <div
-      onClick={() => onSelect(list.id)}
+      onClick={() => !isEditing && onSelect(list.id)}
       className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer hover:shadow-md transition-shadow active:scale-[0.99]">
       <div className="flex-1 min-w-0 mr-4">
-        <h3 className="font-bold text-lg text-gray-800 truncate">
-          {list.name}
-        </h3>
+        {isEditing ? (
+          <input
+            autoFocus
+            className="font-bold text-lg text-gray-800 truncate w-full border-b-2 border-[#2481cc] focus:outline-none bg-transparent"
+            value={editedName}
+            onChange={(e) => setEditedName(e.target.value)}
+            onBlur={handleSave}
+            onKeyDown={(e) => e.key === "Enter" && handleSave()}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <h3 className="font-bold text-lg text-gray-800 truncate">
+            {list.name}
+          </h3>
+        )}
         <div className="flex items-center space-x-3 text-xs text-gray-400 mt-1">
           <span>{new Date(list.createdAt).toLocaleDateString()}</span>
           <span className="flex items-center bg-gray-100 px-2 py-0.5 rounded-full text-gray-600 font-medium">
@@ -66,6 +164,18 @@ const ListEntry: React.FC<{
         </div>
       </div>
       <div className="flex items-center space-x-2">
+        {!isEditing && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setEditedName(list.name)
+              setIsEditing(true)
+            }}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 hover:bg-blue-50 hover:text-blue-500 transition-colors"
+            title="Rename List">
+            <i className="fas fa-pen text-xs"></i>
+          </button>
+        )}
         <button
           onClick={(e) => {
             e.stopPropagation()
@@ -82,11 +192,12 @@ const ListEntry: React.FC<{
 }
 
 const App: React.FC = () => {
-  const [tasks, setTasks] = useState<Task[]>([])
+  const [tasks, setTasks] = useState<(Task & { order?: number })[]>([])
   const [title, setTitle] = useState("Shared Collaborative List")
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE)
   const [currentUser, setCurrentUser] = useState("Guest User")
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
 
   // Navigation & Lists
   const [roomId, setRoomId] = useState<string | null>(null)
@@ -176,9 +287,7 @@ const App: React.FC = () => {
           return prev.map((t) => (t.id === id ? { ...t, ...data, id } : t))
         } else {
           // Add new
-          return [...prev, { ...data, id } as Task].sort(
-            (a, b) => b.createdAt - a.createdAt,
-          )
+          return [...prev, { ...data, id } as Task & { order?: number }]
         }
       })
     })
@@ -210,15 +319,22 @@ const App: React.FC = () => {
     }
   }
 
+  const renameList = (id: string, name: string) => {
+    gun.get("telelist_registry").get(id).get("name").put(name)
+    gun.get(id).get("title").put(name)
+  }
+
   const addTask = useCallback(
     (text: string) => {
       if (!roomId) return
-      const id = Date.now().toString()
-      const newTask: Omit<Task, "id"> = {
+      const now = Date.now()
+      const id = now.toString()
+      const newTask = {
         text,
         completed: false,
         author: currentUser,
-        createdAt: Date.now(),
+        createdAt: now,
+        order: -now,
       }
 
       // Push to Gun (will sync to all peers)
@@ -226,6 +342,55 @@ const App: React.FC = () => {
     },
     [roomId, currentUser],
   )
+
+  const activeTasks = tasks
+    .filter((t) => !t.completed)
+    .sort((a, b) => (a.order ?? -a.createdAt) - (b.order ?? -b.createdAt))
+
+  const completedTasks = tasks
+    .filter((t) => t.completed)
+    .sort((a, b) => b.createdAt - a.createdAt)
+
+  const reorderTask = (draggedId: string, targetId: string) => {
+    if (!roomId) return
+
+    const draggedIndex = activeTasks.findIndex((t) => t.id === draggedId)
+    const targetIndex = activeTasks.findIndex((t) => t.id === targetId)
+
+    if (
+      draggedIndex === -1 ||
+      targetIndex === -1 ||
+      draggedIndex === targetIndex
+    )
+      return
+
+    const items = [...activeTasks]
+    const [draggedItem] = items.splice(draggedIndex, 1)
+    items.splice(targetIndex, 0, draggedItem)
+
+    const prevItem = items[targetIndex - 1]
+    const nextItem = items[targetIndex + 1]
+
+    const getOrder = (t: Task & { order?: number }) => t.order ?? -t.createdAt
+
+    let newOrder: number
+    if (!prevItem && !nextItem) {
+      newOrder = getOrder(draggedItem)
+    } else if (!prevItem) {
+      newOrder = getOrder(nextItem) - 100000
+    } else if (!nextItem) {
+      newOrder = getOrder(prevItem) + 100000
+    } else {
+      newOrder = (getOrder(prevItem) + getOrder(nextItem)) / 2
+    }
+
+    gun.get(roomId).get("tasks").get(draggedId).put({ order: newOrder })
+  }
+
+  const renameTask = (id: string, newText: string) => {
+    if (!roomId) return
+    gun.get(roomId).get("tasks").get(id).put({ text: newText })
+  }
 
   const toggleTask = (id: string) => {
     if (!roomId) return
@@ -288,6 +453,7 @@ const App: React.FC = () => {
                 list={list}
                 onSelect={setRoomId}
                 onDelete={deleteList}
+                onRename={renameList}
               />
             ))}
           </div>
@@ -394,13 +560,59 @@ const App: React.FC = () => {
                 )}
               </div>
               <div className="space-y-1">
-                {tasks.map((task) => (
-                  <TaskItem
+                {activeTasks.map((task) => (
+                  <div
                     key={task.id}
-                    task={task}
-                    onToggle={toggleTask}
-                    onDelete={deleteTask}
-                  />
+                    draggable
+                    onDragStart={(e) => {
+                      setDraggedTaskId(task.id)
+                      e.dataTransfer.effectAllowed = "move"
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      e.dataTransfer.dropEffect = "move"
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      if (draggedTaskId) reorderTask(draggedTaskId, task.id)
+                      setDraggedTaskId(null)
+                    }}
+                    className={`flex items-center gap-2 transition-all ${
+                      draggedTaskId === task.id ? "opacity-50" : "opacity-100"
+                    }`}>
+                    <div className="cursor-grab active:cursor-grabbing p-2 text-gray-400 hover:text-gray-600">
+                      <i className="fas fa-grip-vertical"></i>
+                    </div>
+                    <div className="flex-1">
+                      <TaskItem
+                        task={task}
+                        onToggle={toggleTask}
+                        onDelete={deleteTask}
+                        onRename={renameTask}
+                      />
+                    </div>
+                  </div>
+                ))}
+
+                {completedTasks.length > 0 && (
+                  <div className="mt-6 mb-2 flex items-center">
+                    <div className="h-px bg-gray-200 flex-1"></div>
+                    <span className="px-3 text-xs font-bold text-gray-400 uppercase tracking-widest">
+                      Completed
+                    </span>
+                    <div className="h-px bg-gray-200 flex-1"></div>
+                  </div>
+                )}
+
+                {completedTasks.map((task) => (
+                  <div key={task.id} className="opacity-60">
+                    <TaskItem
+                      task={task}
+                      onToggle={toggleTask}
+                      onDelete={deleteTask}
+                      onRename={renameTask}
+                    />
+                  </div>
                 ))}
               </div>
             </>
