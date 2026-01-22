@@ -1,63 +1,103 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Task, AppStatus } from './types';
 import { TaskItem } from './components/TaskItem';
 import { TaskInput } from './components/TaskInput';
+import Gun from 'gun';
+
+// Initialize Gun with public relay peers for real-time sync
+// In a production app, you would host your own relay peers.
+const gun = Gun({
+  peers: [
+    'https://gun-manhattan.herokuapp.com/gun',
+    'https://p2p.xyz/gun'
+  ]
+});
 
 const App: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [title, setTitle] = useState('My Shared List');
+  const [title, setTitle] = useState('Shared Collaborative List');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
   const [currentUser, setCurrentUser] = useState('Guest User');
 
-  // Load from local storage on mount
-  useEffect(() => {
-    const savedTasks = localStorage.getItem('telelist_tasks');
-    const savedTitle = localStorage.getItem('telelist_title');
-    if (savedTasks) setTasks(JSON.parse(savedTasks));
-    if (savedTitle) setTitle(savedTitle);
+  // Generate a room ID based on the title or Telegram context
+  // This ensures users on the same "list name" see the same data.
+  const roomId = useMemo(() => {
+    const tg = (window as any).Telegram?.WebApp;
+    // Use chat_instance if available (unique to the chat context)
+    const contextId = tg?.initDataUnsafe?.chat_instance || 'global_v1';
+    return `telelist_${contextId}_${title.toLowerCase().replace(/\s+/g, '_')}`;
+  }, [title]);
 
-    // Mock Telegram user info extraction
+  useEffect(() => {
+    // 1. Setup Telegram WebApp
     const tg = (window as any).Telegram?.WebApp;
     if (tg?.initDataUnsafe?.user?.first_name) {
       setCurrentUser(tg.initDataUnsafe.user.first_name);
     }
-    
-    // Set theme and expand Telegram app
     tg?.ready();
     tg?.expand();
-  }, []);
 
-  // Save to local storage on changes
-  useEffect(() => {
-    localStorage.setItem('telelist_tasks', JSON.stringify(tasks));
-    localStorage.setItem('telelist_title', title);
-  }, [tasks, title]);
+    // 2. Synchronize with Gun.js
+    const listNode = gun.get(roomId).get('tasks');
+    
+    // Listen for changes
+    listNode.map().on((data, id) => {
+      if (!data) {
+        // Handle deletion
+        setTasks(prev => prev.filter(t => t.id !== id));
+        return;
+      }
 
-  const addTask = useCallback((text: string, authorOverride?: string) => {
-    const newTask: Task = {
-      id: Date.now().toString(),
+      setTasks(prev => {
+        const exists = prev.find(t => t.id === id);
+        if (exists) {
+          // Update existing
+          return prev.map(t => t.id === id ? { ...t, ...data, id } : t);
+        } else {
+          // Add new
+          return [...prev, { ...data, id } as Task].sort((a, b) => b.createdAt - a.createdAt);
+        }
+      });
+    });
+
+    return () => {
+      listNode.off();
+    };
+  }, [roomId]);
+
+  const addTask = useCallback((text: string) => {
+    const id = Date.now().toString();
+    const newTask: Omit<Task, 'id'> = {
       text,
       completed: false,
-      author: authorOverride || currentUser,
+      author: currentUser,
       createdAt: Date.now()
     };
-    setTasks(prev => [newTask, ...prev]);
-  }, [currentUser]);
+    
+    // Push to Gun (will sync to all peers)
+    gun.get(roomId).get('tasks').get(id).put(newTask);
+  }, [roomId, currentUser]);
 
   const toggleTask = (id: string) => {
-    setTasks(prev => prev.map(t => 
-      t.id === id ? { ...t, completed: !t.completed } : t
-    ));
+    const task = tasks.find(t => t.id === id);
+    if (task) {
+      gun.get(roomId).get('tasks').get(id).put({ completed: !task.completed });
+    }
   };
 
   const deleteTask = (id: string) => {
-    setTasks(prev => prev.filter(t => t.id !== id));
+    // In Gun, putting null effectively deletes/nullifies the node in the map
+    gun.get(roomId).get('tasks').get(id).put(null as any);
   };
 
   const clearCompleted = () => {
-    setTasks(prev => prev.filter(t => !t.completed));
+    tasks.forEach(t => {
+      if (t.completed) {
+        deleteTask(t.id);
+      }
+    });
   };
 
   return (
@@ -84,33 +124,38 @@ const App: React.FC = () => {
                 <i className="fas fa-pen text-sm opacity-50"></i>
               </h1>
             )}
+            <div className="flex items-center">
+              <div className="bg-white/20 px-3 py-1 rounded-full flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse-soft"></div>
+                <span className="text-[10px] font-bold uppercase tracking-tighter">Live Sync</span>
+              </div>
+            </div>
           </div>
           <div className="flex items-center space-x-2 text-xs opacity-80 uppercase tracking-widest">
-            <span className="bg-green-400 w-2 h-2 rounded-full"></span>
-            <span>Collaborative Session</span>
-            <span className="mx-2">•</span>
-            <span>{tasks.length} items</span>
+            <i className="fas fa-users text-[10px]"></i>
+            <span>Real-time Peer Session</span>
+            <span className="mx-1">•</span>
+            <span>{tasks.length} items shared</span>
           </div>
         </div>
       </header>
 
       {/* Content */}
       <main className="flex-1 max-w-3xl w-full mx-auto p-4 space-y-6">
-        
         {/* Task List */}
         <section>
           {tasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-gray-400 space-y-4">
               <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center">
-                <i className="fas fa-clipboard-list text-3xl"></i>
+                <i className="fas fa-sync-alt text-3xl animate-spin-slow opacity-20" style={{ animationDuration: '10s' }}></i>
               </div>
-              <p className="text-lg font-medium">No items yet</p>
-              <p className="text-sm text-center px-10">Add something to your shared list to get started with your friends!</p>
+              <p className="text-lg font-medium">Waiting for items...</p>
+              <p className="text-sm text-center px-10">Any item added by you or your peers will appear here instantly.</p>
             </div>
           ) : (
             <>
               <div className="flex justify-between items-center mb-4 px-1">
-                <span className="text-xs font-bold text-gray-500 uppercase">Items</span>
+                <span className="text-xs font-bold text-gray-500 uppercase">Shared List</span>
                 {tasks.some(t => t.completed) && (
                   <button 
                     onClick={clearCompleted}
@@ -141,7 +186,7 @@ const App: React.FC = () => {
       {/* User Status Toast (Floating) */}
       <div className="fixed bottom-24 left-1/2 -translate-x-1/2 pointer-events-none">
         <div className="bg-black/70 text-white text-[10px] px-3 py-1 rounded-full backdrop-blur-sm border border-white/10 flex items-center space-x-2">
-           <i className="fas fa-user text-green-400"></i>
+           <i className="fas fa-user text-blue-400"></i>
            <span>Acting as <strong>{currentUser}</strong></span>
         </div>
       </div>

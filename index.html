@@ -22,6 +22,13 @@
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
         }
+        @keyframes pulse-soft {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+        .animate-pulse-soft {
+          animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
     </style>
 <script type="importmap">
 {
@@ -31,7 +38,8 @@
     "react/": "https://esm.sh/react@^19.2.3/",
     "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
     "vite": "https://esm.sh/vite@^7.3.1",
-    "@google/genai": "https://esm.sh/@google/genai@^1.38.0"
+    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
+    "gun": "https://esm.sh/gun@0.2020.1239"
   }
 }
 </script>
