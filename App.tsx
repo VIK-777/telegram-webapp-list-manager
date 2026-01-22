@@ -16,6 +16,71 @@ interface ListMetadata {
   createdAt: number
 }
 
+const ListEntry: React.FC<{
+  list: ListMetadata
+  onSelect: (id: string) => void
+  onDelete: (id: string) => void
+}> = ({ list, onSelect, onDelete }) => {
+  const [stats, setStats] = useState({ total: 0, completed: 0 })
+
+  useEffect(() => {
+    const tasksMap = new Map<string, boolean>()
+    const node = gun.get(list.id).get("tasks")
+
+    // Subscribe to tasks to count them
+    const ev = node.map().on((data, id) => {
+      if (data === null) {
+        tasksMap.delete(id)
+      } else if (data && typeof data === "object") {
+        tasksMap.set(id, !!data.completed)
+      }
+
+      let total = 0
+      let completed = 0
+      tasksMap.forEach((isCompleted) => {
+        total++
+        if (isCompleted) completed++
+      })
+      setStats({ total, completed })
+    })
+
+    return () => {
+      ev.off()
+    }
+  }, [list.id])
+
+  return (
+    <div
+      onClick={() => onSelect(list.id)}
+      className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer hover:shadow-md transition-shadow active:scale-[0.99]">
+      <div className="flex-1 min-w-0 mr-4">
+        <h3 className="font-bold text-lg text-gray-800 truncate">
+          {list.name}
+        </h3>
+        <div className="flex items-center space-x-3 text-xs text-gray-400 mt-1">
+          <span>{new Date(list.createdAt).toLocaleDateString()}</span>
+          <span className="flex items-center bg-gray-100 px-2 py-0.5 rounded-full text-gray-600 font-medium">
+            <i className="fas fa-check-circle mr-1.5 text-[10px] text-green-500"></i>
+            {stats.completed} / {stats.total}
+          </span>
+        </div>
+      </div>
+      <div className="flex items-center space-x-2">
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete(list.id)
+          }}
+          className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+          title="Delete List">
+          <i className="fas fa-trash-alt text-xs"></i>
+        </button>
+        <i className="fas fa-chevron-right text-gray-300 pl-2"></i>
+      </div>
+    </div>
+  )
+}
+
 const App: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([])
   const [title, setTitle] = useState("Shared Collaborative List")
@@ -81,6 +146,10 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!roomId) return
 
+    // Clear previous room data
+    setTasks([])
+    setTitle("Loading...")
+
     // Sync Title
     const titleNode = gun.get(roomId).get("title")
     titleNode.on((data) => {
@@ -130,6 +199,15 @@ const App: React.FC = () => {
 
     setNewListName("")
     setRoomId(id)
+  }
+
+  const deleteList = (id: string) => {
+    if (window.confirm("Are you sure you want to delete this list?")) {
+      gun
+        .get("telelist_registry")
+        .get(id)
+        .put(null as any)
+    }
   }
 
   const addTask = useCallback(
@@ -205,20 +283,12 @@ const App: React.FC = () => {
 
           <div className="space-y-2">
             {availableLists.map((list) => (
-              <div
+              <ListEntry
                 key={list.id}
-                onClick={() => setRoomId(list.id)}
-                className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer hover:shadow-md transition-shadow active:scale-[0.99]">
-                <div>
-                  <h3 className="font-bold text-lg text-gray-800">
-                    {list.name}
-                  </h3>
-                  <span className="text-xs text-gray-400">
-                    {new Date(list.createdAt).toLocaleDateString()}
-                  </span>
-                </div>
-                <i className="fas fa-chevron-right text-gray-300"></i>
-              </div>
+                list={list}
+                onSelect={setRoomId}
+                onDelete={deleteList}
+              />
             ))}
           </div>
         </main>
