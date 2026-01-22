@@ -21,7 +21,6 @@ const App: React.FC = () => {
   // This ensures users on the same "list name" see the same data.
   const roomId = useMemo(() => {
     const tg = (window as any).Telegram?.WebApp
-    // Use chat_instance if available (unique to the chat context)
     return `telelist_${title.toLowerCase().replace(/\s+/g, "_")}`
   }, [title])
 
