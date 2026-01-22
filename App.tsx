@@ -7,7 +7,7 @@ import Gun from "gun"
 // Initialize Gun with public relay peers for real-time sync
 // In a production app, you would host your own relay peers.
 const gun = Gun({
-  peers: ["{process.env.GUN_URL}"],
+  peers: ["{process.env.REACT_APP_GUN_URL}"],
 })
 
 const App: React.FC = () => {
