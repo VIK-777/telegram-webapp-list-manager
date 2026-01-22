@@ -25,7 +25,6 @@ jobs:
           GUN_URL: ${{ secrets.GUN_URL }}
         run: |
           cat <<EOF > .env.local
-          REACT_APP_GUN_URL="$GUN_URL"
           VITE_GUN_URL="$GUN_URL"
           EOF
       - name: Set up Node

@@ -33,8 +33,6 @@ const App: React.FC = () => {
     tg?.ready()
     tg?.expand()
 
-    console.log(`Gun URL: ${process.env.REACT_APP_GUN_URL}`)
-    console.log(`Vite Gun URL: ${import.meta.env.VITE_GUN_URL}`)
     // 2. Synchronize with Gun.js
     const listNode = gun.get(roomId).get("tasks")
 
