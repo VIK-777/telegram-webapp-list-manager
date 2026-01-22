@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import { Task, AppStatus } from "./types"
 import { TaskItem } from "./components/TaskItem"
 import { TaskInput } from "./components/TaskInput"
@@ -10,6 +10,12 @@ const gun = Gun({
   peers: [`${import.meta.env.VITE_GUN_URL}`],
 })
 
+interface ListMetadata {
+  id: string
+  name: string
+  createdAt: number
+}
+
 const App: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([])
   const [title, setTitle] = useState("Shared Collaborative List")
@@ -17,12 +23,10 @@ const App: React.FC = () => {
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE)
   const [currentUser, setCurrentUser] = useState("Guest User")
 
-  // Generate a room ID based on the title or Telegram context
-  // This ensures users on the same "list name" see the same data.
-  const roomId = useMemo(() => {
-    const tg = (window as any).Telegram?.WebApp
-    return `telelist_${title.toLowerCase().replace(/\s+/g, "_")}`
-  }, [title])
+  // Navigation & Lists
+  const [roomId, setRoomId] = useState<string | null>(null)
+  const [availableLists, setAvailableLists] = useState<ListMetadata[]>([])
+  const [newListName, setNewListName] = useState("")
 
   useEffect(() => {
     // 1. Setup Telegram WebApp
@@ -33,7 +37,59 @@ const App: React.FC = () => {
     tg?.ready()
     tg?.expand()
 
-    // 2. Synchronize with Gun.js
+    // Handle Back Button
+    const handleBack = () => setRoomId(null)
+    if (roomId) {
+      tg?.BackButton?.show()
+      tg?.BackButton?.onClick(handleBack)
+    } else {
+      tg?.BackButton?.hide()
+    }
+
+    return () => {
+      tg?.BackButton?.offClick(handleBack)
+    }
+  }, [roomId])
+
+  // 2. Load Registry (List of Lists)
+  useEffect(() => {
+    const registry = gun.get("telelist_registry")
+
+    registry.map().on((data, id) => {
+      if (!data) {
+        setAvailableLists((prev) => prev.filter((l) => l.id !== id))
+        return
+      }
+      if (data.name) {
+        setAvailableLists((prev) => {
+          const exists = prev.find((l) => l.id === id)
+          const newItem = {
+            id,
+            name: data.name,
+            createdAt: data.createdAt || 0,
+          }
+          if (exists) {
+            return prev.map((l) => (l.id === id ? { ...l, ...newItem } : l))
+          }
+          return [...prev, newItem].sort((a, b) => b.createdAt - a.createdAt)
+        })
+      }
+    })
+  }, [])
+
+  // 3. Synchronize with Gun.js (Specific Room)
+  useEffect(() => {
+    if (!roomId) return
+
+    // Sync Title
+    const titleNode = gun.get(roomId).get("title")
+    titleNode.on((data) => {
+      if (data && typeof data === "string") {
+        setTitle(data)
+      }
+    })
+
+    // Sync Tasks
     const listNode = gun.get(roomId).get("tasks")
 
     // Listen for changes
@@ -59,12 +115,26 @@ const App: React.FC = () => {
     })
 
     return () => {
+      titleNode.off()
       listNode.off()
     }
   }, [roomId])
 
+  const createNewList = () => {
+    const name = newListName.trim() || "Untitled List"
+    const id = `list_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const metadata = { name, createdAt: Date.now() }
+
+    gun.get("telelist_registry").get(id).put(metadata)
+    gun.get(id).get("title").put(name)
+
+    setNewListName("")
+    setRoomId(id)
+  }
+
   const addTask = useCallback(
     (text: string) => {
+      if (!roomId) return
       const id = Date.now().toString()
       const newTask: Omit<Task, "id"> = {
         text,
@@ -80,6 +150,7 @@ const App: React.FC = () => {
   )
 
   const toggleTask = (id: string) => {
+    if (!roomId) return
     const task = tasks.find((t) => t.id === id)
     if (task) {
       gun.get(roomId).get("tasks").get(id).put({ completed: !task.completed })
@@ -87,6 +158,7 @@ const App: React.FC = () => {
   }
 
   const deleteTask = (id: string) => {
+    if (!roomId) return
     // In Gun, putting null effectively deletes/nullifies the node in the map
     gun
       .get(roomId)
@@ -103,6 +175,57 @@ const App: React.FC = () => {
     })
   }
 
+  // Render Home View (List of Lists)
+  if (!roomId) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <header className="bg-[#2481cc] text-white p-6 shadow-lg sticky top-0 z-40">
+          <h1 className="text-2xl font-bold">My Lists</h1>
+          <p className="text-xs opacity-80 uppercase tracking-widest mt-1">
+            Select a list to collaborate
+          </p>
+        </header>
+
+        <main className="flex-1 p-4 max-w-3xl mx-auto w-full space-y-4">
+          <div className="flex space-x-2 mb-6">
+            <input
+              type="text"
+              placeholder="New List Name..."
+              className="flex-1 p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#2481cc]"
+              value={newListName}
+              onChange={(e) => setNewListName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && createNewList()}
+            />
+            <button
+              onClick={createNewList}
+              className="bg-[#2481cc] text-white px-6 py-3 rounded-lg font-bold shadow-md active:scale-95 transition-transform">
+              Create
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {availableLists.map((list) => (
+              <div
+                key={list.id}
+                onClick={() => setRoomId(list.id)}
+                className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer hover:shadow-md transition-shadow active:scale-[0.99]">
+                <div>
+                  <h3 className="font-bold text-lg text-gray-800">
+                    {list.name}
+                  </h3>
+                  <span className="text-xs text-gray-400">
+                    {new Date(list.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
+                <i className="fas fa-chevron-right text-gray-300"></i>
+              </div>
+            ))}
+          </div>
+        </main>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen pb-32 flex flex-col">
       {/* Header */}
@@ -115,13 +238,39 @@ const App: React.FC = () => {
                 className="bg-transparent border-b-2 border-white text-2xl font-bold focus:outline-none w-full mr-4"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                onBlur={() => setIsEditingTitle(false)}
-                onKeyDown={(e) => e.key === "Enter" && setIsEditingTitle(false)}
+                onBlur={() => {
+                  setIsEditingTitle(false)
+                  gun.get(roomId).get("title").put(title)
+                  // Update registry name as well
+                  gun
+                    .get("telelist_registry")
+                    .get(roomId)
+                    .get("name")
+                    .put(title)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    setIsEditingTitle(false)
+                    gun.get(roomId).get("title").put(title)
+                    gun
+                      .get("telelist_registry")
+                      .get(roomId)
+                      .get("name")
+                      .put(title)
+                  }
+                }}
               />
             ) : (
               <h1
                 className="text-2xl font-bold cursor-pointer flex items-center space-x-2"
                 onClick={() => setIsEditingTitle(true)}>
+                {/* Back button for non-Telegram environments */}
+                <i
+                  className="fas fa-arrow-left mr-2 text-xl opacity-70 hover:opacity-100 cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setRoomId(null)
+                  }}></i>
                 <span>{title}</span>
                 <i className="fas fa-pen text-sm opacity-50"></i>
               </h1>
