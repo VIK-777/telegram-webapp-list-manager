@@ -3,13 +3,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Task, AppStatus } from './types';
 import { TaskItem } from './components/TaskItem';
 import { TaskInput } from './components/TaskInput';
-import { getSmartSuggestions } from './services/geminiService';
 
 const App: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [title, setTitle] = useState('My Shared List');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
   const [currentUser, setCurrentUser] = useState('Guest User');
 
@@ -25,6 +23,10 @@ const App: React.FC = () => {
     if (tg?.initDataUnsafe?.user?.first_name) {
       setCurrentUser(tg.initDataUnsafe.user.first_name);
     }
+    
+    // Set theme and expand Telegram app
+    tg?.ready();
+    tg?.expand();
   }, []);
 
   // Save to local storage on changes
@@ -58,20 +60,6 @@ const App: React.FC = () => {
     setTasks(prev => prev.filter(t => !t.completed));
   };
 
-  const handleGetSuggestions = async () => {
-    if (status === AppStatus.LOADING) return;
-    setStatus(AppStatus.LOADING);
-    const textItems = tasks.map(t => t.text);
-    const newSuggestions = await getSmartSuggestions(title, textItems);
-    setSuggestions(newSuggestions);
-    setStatus(AppStatus.IDLE);
-  };
-
-  const handleAddSuggestion = (suggestion: string) => {
-    addTask(suggestion, 'AI Assistant');
-    setSuggestions(prev => prev.filter(s => s !== suggestion));
-  };
-
   return (
     <div className="min-h-screen pb-32 flex flex-col">
       {/* Header */}
@@ -96,16 +84,6 @@ const App: React.FC = () => {
                 <i className="fas fa-pen text-sm opacity-50"></i>
               </h1>
             )}
-            <div className="flex space-x-2">
-                <button 
-                  onClick={handleGetSuggestions}
-                  disabled={status === AppStatus.LOADING}
-                  className="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition-colors"
-                  title="AI Suggestions"
-                >
-                  <i className={`fas fa-magic ${status === AppStatus.LOADING ? 'animate-pulse' : ''}`}></i>
-                </button>
-            </div>
           </div>
           <div className="flex items-center space-x-2 text-xs opacity-80 uppercase tracking-widest">
             <span className="bg-green-400 w-2 h-2 rounded-full"></span>
@@ -119,31 +97,6 @@ const App: React.FC = () => {
       {/* Content */}
       <main className="flex-1 max-w-3xl w-full mx-auto p-4 space-y-6">
         
-        {/* AI Suggestions Section */}
-        {suggestions.length > 0 && (
-          <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-sm font-semibold text-blue-800 uppercase tracking-wider flex items-center">
-                <i className="fas fa-sparkles mr-2"></i> Suggestions
-              </h3>
-              <button onClick={() => setSuggestions([])} className="text-blue-400 hover:text-blue-600">
-                <i className="fas fa-times"></i>
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {suggestions.map((s, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleAddSuggestion(s)}
-                  className="bg-white border border-blue-200 text-blue-700 px-3 py-1.5 rounded-full text-sm hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-                >
-                  + {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Task List */}
         <section>
           {tasks.length === 0 ? (
