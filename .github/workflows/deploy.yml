@@ -20,6 +20,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Create and populate .env file
+        env:
+          GUN_URL: ${{ secrets.GUN_URL }}
+        run: |
+          cat <<EOF > .env.local
+          GUN_URL="$GUN_URL"
+          EOF
       - name: Set up Node
         uses: actions/setup-node@v4
         with:

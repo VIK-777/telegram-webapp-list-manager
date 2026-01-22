@@ -7,7 +7,7 @@ import Gun from "gun"
 // Initialize Gun with public relay peers for real-time sync
 // In a production app, you would host your own relay peers.
 const gun = Gun({
-  peers: ["https://gun-manhattan.herokuapp.com/gun", "https://p2p.xyz/gun"],
+  peers: ["{process.env.GUN_URL}"],
 })
 
 const App: React.FC = () => {
