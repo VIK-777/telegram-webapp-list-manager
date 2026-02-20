@@ -67,7 +67,7 @@ const TaskItem: React.FC<{
         )}
       </div>
 
-      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+      <div className="flex items-center ml-2">
         {!isEditing && (
           <button
             onClick={(e) => {
@@ -563,6 +563,7 @@ const App: React.FC = () => {
                 {activeTasks.map((task) => (
                   <div
                     key={task.id}
+                    data-task-id={task.id}
                     draggable
                     onDragStart={(e) => {
                       setDraggedTaskId(task.id)
@@ -580,7 +581,25 @@ const App: React.FC = () => {
                     className={`flex items-center gap-2 transition-all ${
                       draggedTaskId === task.id ? "opacity-50" : "opacity-100"
                     }`}>
-                    <div className="cursor-grab active:cursor-grabbing p-2 text-gray-400 hover:text-gray-600">
+                    <div
+                      className="cursor-grab active:cursor-grabbing p-2 text-gray-400 hover:text-gray-600 touch-none"
+                      onTouchStart={() => setDraggedTaskId(task.id)}
+                      onTouchMove={(e) => {
+                        e.preventDefault()
+                        const touch = e.touches[0]
+                        const target = document.elementFromPoint(
+                          touch.clientX,
+                          touch.clientY,
+                        )
+                        const taskRow = target?.closest("[data-task-id]")
+                        if (taskRow) {
+                          const targetId = taskRow.getAttribute("data-task-id")
+                          if (targetId && targetId !== task.id) {
+                            reorderTask(task.id, targetId)
+                          }
+                        }
+                      }}
+                      onTouchEnd={() => setDraggedTaskId(null)}>
                       <i className="fas fa-grip-vertical"></i>
                     </div>
                     <div className="flex-1">
